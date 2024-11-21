@@ -2,7 +2,7 @@ import pygame
 from score_manager import ScoreManager
 
 class Player:
-    def __init__(self, cell_size, maze, start_position=None):
+    def __init__(self, cell_size, maze, start_position=None, lives=3):
         """
         Initialize the player with a starting position, ensuring it's in a valid pathway.
         """
@@ -16,30 +16,43 @@ class Player:
                 if start_position:
                     break
 
-        self.position = list(start_position)  # Player's starting position
+        self.start_position = start_position  # Store the starting position
+        self.position = list(start_position)  # Player's current position
         self.cell_size = cell_size
         self.speed = 2  # Movement speed
         self.current_direction = None  # Current direction of movement
         self.next_direction = None  # Next direction pressed by player
+        self.lives = lives  # Initialize lives
+        self.last_collision_time = 0  # Time of the last collision
+        self.invincibility_duration = 2000  # 2 seconds of invincibility
 
-        # Load the Paac-Man image
+        # Load the Pac-Man image
         try:
             self.image = pygame.image.load(r"./resources/pacman.png")
             self.image = pygame.transform.scale(self.image, (20, 20))  # Scale the image to fit
         except pygame.error:
-            print("Error loading Paac-Man image, defaulting to yellow color.")
+            print("Error loading Pac-Man image, defaulting to yellow color.")
             self.image = pygame.Surface((20, 20))  # Fallback appearance
             self.image.fill((255, 255, 0))  # Yellow color as fallback
 
         self.rect = self.image.get_rect(center=(self.position[0] + self.cell_size // 2,
                                                  self.position[1] + self.cell_size // 2))
 
+    def reset_position(self):
+        """
+        Reset the player's position to the starting position.
+        """
+        self.position = list(self.start_position)
+        self.rect.topleft = self.start_position
+        self.current_direction = None
+        self.next_direction = None
+
     def update(self, maze):
         """
         Update the player's position based on the last direction and handle wall collisions.
         """
         keys = pygame.key.get_pressed()
-        
+
         # Update the next direction based on key press
         if keys[pygame.K_LEFT]:
             self.next_direction = (-self.speed, 0)  # Move left
@@ -82,14 +95,19 @@ class Player:
                 return True  # Collision detected
         return False  # No collision
 
-    def collides_with_ghost(self, ghosts):
+    def collides_with_ghost(self, ghosts, current_time):
         """
-        Check if the player collides with any ghosts.
+        Check if the player collides with any ghosts. If a collision occurs, reduce lives.
         """
-        for ghost in ghosts:
-            if self.rect.colliderect(ghost.rect):
-                return True  # Collision detected with a ghost
-        return False  # No collision with ghosts
+        if current_time - self.last_collision_time > self.invincibility_duration:
+            for ghost in ghosts:
+                if self.rect.colliderect(ghost.rect):
+                    self.lives -= 1
+                    self.last_collision_time = current_time
+                    if self.lives > 0:
+                        self.reset_position()  # Reset the player's position
+                    return True
+        return False
 
     def collect_pellet(self, maze):
         """
@@ -101,6 +119,12 @@ class Player:
                 ScoreManager.getInstance().add_score(10)  # Add points for collecting a pellet
                 return True  # Pellet collected
         return False  # No pellet collected
+
+    def is_game_over(self):
+        """
+        Check if the game is over (i.e., the player has no lives left).
+        """
+        return self.lives <= 0
 
     def draw(self, screen):
         """

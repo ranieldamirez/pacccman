@@ -1,11 +1,9 @@
-# game.py (updated)
 import pygame
 from player import Player
 from enemy import Enemy
 from maze import Maze
 from score_manager import ScoreManager
 from game_event_manager import GameEventManager
-import math
 import sys
 
 pygame.init()
@@ -20,7 +18,6 @@ BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 YELLOW = (255, 255, 0)
 RED = (255, 0, 0)
-BLUE = (0, 191, 255)
 
 # Fonts
 title_font = pygame.font.Font(None, 100)
@@ -30,7 +27,7 @@ small_text_font = pygame.font.Font(None, 28)
 # Load the PAAAC-MAN image
 try:
     paaacman_image = pygame.image.load("./resources/PAAAC.jpg")
-    paaacman_image = pygame.transform.scale(paaacman_image, (150, 100))
+    paaacman_image = pygame.transform.scale(paaacman_image, (100, 100))
 except pygame.error:
     print("ERROR: UNABLE TO LOAD THE IMAGE")
     sys.exit()
@@ -38,12 +35,12 @@ except pygame.error:
 class GameEngine:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("PAAAC-MAN Arcade Game")
+        pygame.display.set_caption("PACCC-MAN Arcade Game")
         self.clock = pygame.time.Clock()
 
         # Initializing game elements
         self.map = Maze(SCREEN_WIDTH, SCREEN_HEIGHT, cell_size)
-        self.player = Player(cell_size, self.map)
+        self.player = Player(cell_size, self.map, lives=3)
         self.ghosts = [Enemy(cell_size, self.map) for _ in range(4)]
         self.score_manager = ScoreManager()
         self.event_manager = GameEventManager()
@@ -63,7 +60,7 @@ class GameEngine:
         image_y = title_rect.centery - paaacman_image.get_height() // 2
         self.screen.blit(paaacman_image, (image_x, image_y))
 
-        high_scores = ScoreManager.getInstance().get_high_scores()
+        high_scores = self.score_manager.getInstance().get_high_scores()
         for i, (username, score) in enumerate(high_scores):
             score_text = text_font.render(f"{i + 1}. {username}: {score}", True, WHITE)
             self.screen.blit(score_text, (self.screen.get_width() // 3, (self.screen.get_height() // 2) + i * 40))
@@ -81,33 +78,21 @@ class GameEngine:
             elif event.type == pygame.QUIT:
                 self.running = False
 
-    def pause_screen(self):
-        # Display pause menu
-        self.screen.fill(BLACK)
-        pause_text = title_font.render("Paused", True, WHITE)
-        pause_rect = pause_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 3))
-        self.screen.blit(pause_text, pause_rect)
-
-        resume_text = text_font.render("Press P to Resume", True, WHITE)
-        quit_text = text_font.render("Press ESC to Quit", True, WHITE)
-        self.screen.blit(resume_text, (SCREEN_WIDTH // 3, SCREEN_HEIGHT // 2))
-        self.screen.blit(quit_text, (SCREEN_WIDTH // 3, SCREEN_HEIGHT // 2 + 40))
-        pygame.display.flip()
-
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_p:
-                    self.state = "playing"
-                elif event.key == pygame.K_ESCAPE:
-                    self.running = False
-
     def game_over_screen(self):
-        self.screen.fill((0, 0, 0))
-        font = pygame.font.Font(None, 74)
-        message = font.render("Game Over", True, (255, 0, 0))
-        self.screen.blit(message, (SCREEN_WIDTH // 3, SCREEN_HEIGHT // 3))
+        self.screen.fill(BLACK)
+        
+        # Render "Game Over" message
+        game_over_text = title_font.render("Game Over", True, RED)
+        text_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 3))
+        self.screen.blit(game_over_text, text_rect)
+
+        # Display score when the game is over
+        score_text = text_font.render(f"Score: {self.score_manager.get_current_score()}", True, WHITE)
+        score_rect = score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+        self.screen.blit(score_text, score_rect)
+
         pygame.display.flip()
-        pygame.time.wait(3000)
+        pygame.time.wait(3000)  # Wait for 3 seconds before quitting
         self.running = False
 
     def main_game(self):
@@ -122,12 +107,24 @@ class GameEngine:
                 ghost.update(self.map, self.player)
             ghost.draw(self.screen)
 
-        score_text = text_font.render(f"Score: {self.score_manager.getInstance().get_current_score()}", True, WHITE)
+        # Get score from the score manager
+        score_text = text_font.render(f"Score: {self.score_manager.get_current_score()}", True, WHITE)
+        lives_text = text_font.render(f"Lives: {self.player.lives}", True, WHITE)
+        
+        # Display score and lives
         self.screen.blit(score_text, (10, 10))
+        self.screen.blit(lives_text, (10, 50))
 
-        if self.player.collides_with_ghost(self.ghosts):
-            self.state = "game_over"
-        elif self.map.all_pellets_collected():
+        # Check for collisions with ghosts
+        if self.player.collides_with_ghost(self.ghosts, pygame.time.get_ticks()):
+            if self.player.lives > 0:
+                self.player.lives -= 1  # Decrease the player's life
+                self.player.reset_position(self.map)  # Reset player's position (respawn)
+            else:
+                self.game_over_screen()
+
+        # Check if all pellets are collected
+        if self.map.all_pellets_collected():
             self.state = "game_over"
 
         pygame.display.flip()
@@ -151,9 +148,6 @@ class GameEngine:
                 self.game_over_screen()
 
             self.clock.tick(FPS)
-
-        pygame.quit()
-
 
 if __name__ == "__main__":
     game = GameEngine()
